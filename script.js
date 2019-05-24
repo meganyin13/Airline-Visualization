@@ -57,12 +57,10 @@ function getAirlinesChartConfig() {
 function getAirlinesChartScales(airlines, config) {
     let { bodyWidth, bodyHeight } = config;
     let maximumCount = d3.max(airlines, (d) => d.Count);
-    console.log(maximumCount);
 
     let xScale = d3.scaleLinear()
         .range([0, bodyWidth])
         .domain([0, maximumCount]);
-    console.log(xScale);
 
     let yScale = d3.scaleBand()
         .range([0, bodyHeight])
@@ -90,6 +88,18 @@ function drawBarsAirlinesChart(airlines, scales, config) {
             return xScale(d.Count)
         })
         .attr("fill", "#2a5599")
+        .on("mouseenter", function(d) { // <- this is the new code
+            drawRoutes(null);
+            drawRoutes(d.AirlineID);
+            d3.select(this).attr("fill", "#992a5b")
+        })
+        .on("mouseleave", function(d) {
+            drawRoutes(null);
+            d3.select(this).attr("fill", "#2a5599")
+        })
+    //TODO: Add another listener, this time for mouseleave
+    //TODO: In this listener, call drawRoutes(null), this will cause the function to remove all lines in the chart since there is no airline withe AirlineID == null.
+    //TODO: change the fill color of the bar back to "#2a5599"
 }
 
 function drawAxesAirlinesChart(airlines, scales, config){
@@ -199,34 +209,31 @@ function drawAirports(airports) {
     let projection = getMapProjection(config); //get the projection
     let container = config.container; //get the container
 
-    console.log(airports);
 
     let circles = container.selectAll("circle")
         .data(airports)
         .enter()
         .append("circle")
         .attr("r", "1")
-        .attr("cx", d => {
-            console.log(d);
-            return projection([d.Longitude,d.Latitude])[0]
-        })
+        .attr("cx", d => projection([d.Longitude,d.Latitude])[0])
         .attr("cy", d => projection([d.Longitude,d.Latitude])[1])
         .attr("fill", "#2a5599")
 }
 
 function drawRoutes(airlineID) {
     let routes = store.routes;
-    let projection = store.projection;
+    let projection = store.mapProjection;
     let container = d3.select("#Map");
     let selectedRoutes = routes.filter(d => d.AirlineID === airlineID);
 
     let bindedData = container.selectAll("line")
         .data(selectedRoutes, d => d.ID)
         .enter()
-        .attr("x1", d => d.SourceLongitude)
-        .attr("y1", d => d.SourceLatitude)
-        .attr("x2", d => d.DestLongitude)
-        .attr("y2", d => d.DestLatitude)
+        .append("line")
+        .attr("x1", d => projection([d.SourceLongitude, d.SourceLatitude])[0])
+        .attr("y1", d => projection([d.SourceLongitude, d.SourceLatitude])[1])
+        .attr("x2", d => projection([d.DestLongitude, d.DestLatitude])[0])
+        .attr("y2", d => projection([d.DestLongitude, d.DestLatitude])[1])
         .attr("stroke", "#992a2a")
         .attr("opacity", 0.1)
         .exit()
@@ -238,7 +245,8 @@ function showData() {
     drawAirlinesChart(airlines);
     drawMap(store.geoJSON);
     let airports = groupByAirport(store.routes);
-    drawAirports(airports)
+    drawAirports(airports);
+    // drawRoutes("24")
 }
 
 
