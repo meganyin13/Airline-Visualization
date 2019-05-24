@@ -1,9 +1,12 @@
 let store = {};
 
 function loadData() {
-    let promise = d3.csv("routes.csv");
-    return promise.then(routes => {
-        store.routes = routes;
+    return Promise.all([
+        d3.csv("routes.csv"),
+        d3.json("countries.geo.json"),
+    ]).then(datasets => {
+        store.routes = datasets[0];
+        store.geoJSON = datasets[1];
         return store;
     })
 }
@@ -23,18 +26,144 @@ function groupByAirline(data) {
         return result;
     }, {});
 
-    //We use this to convert the dictionary produced by the code above, into a list, that will make it easier to create the visualization.
     result = Object.keys(result).map(key => result[key]);
     result = result.sort((x, y) => {
-        return d3.ascending(x.Count, y.Count);
+        return d3.descending(x.Count, y.Count);
     });
 
     return result
 }
 
+function getAirlinesChartConfig() {
+    let width = 350;
+    let height = 400;
+    let margin = {
+        top: 10,
+        bottom: 50,
+        left: 130,
+        right: 10
+    };
+    let bodyHeight = height - margin.top - margin.bottom;
+    let bodyWidth = width - margin.left - margin.right;
+
+    let container = d3.select("#AirlinesChart");
+        container
+            .attr("width", width)
+            .attr("height", height);
+
+    return { width, height, margin, bodyHeight, bodyWidth, container }
+}
+
+function getAirlinesChartScales(airlines, config) {
+    let { bodyWidth, bodyHeight } = config;
+    let maximumCount = d3.max(airlines, (d) => d.Count);
+    console.log(maximumCount);
+
+    let xScale = d3.scaleLinear()
+        .range([0, bodyWidth])
+        .domain([0, maximumCount]);
+    console.log(xScale);
+
+    let yScale = d3.scaleBand()
+        .range([0, bodyHeight])
+        .domain(airlines.map(a => a.AirlineName)) //The domain is the list of ailines names
+        .padding(0.2);
+
+    return { xScale, yScale }
+}
+
+function drawBarsAirlinesChart(airlines, scales, config) {
+    let {margin, container} = config;
+    let {xScale, yScale} = scales;
+    let body = container.append("g")
+        .style("transform",
+            `translate(${margin.left}px,${margin.top}px)`
+        );
+
+    let bars = body.selectAll(".bar")
+        .data(airlines);
+
+    bars.enter().append("rect")
+        .attr("height", yScale.bandwidth())
+        .attr("y", (d) => yScale(d.AirlineName))
+        .attr("width", d => {
+            console.log(xScale(d.Count));
+            return xScale(d.Count)
+        })
+        .attr("fill", "#2a5599")
+}
+
+function drawAxesAirlinesChart(airlines, scales, config){
+    let {xScale, yScale} = scales;
+    let {container, margin, height} = config;
+    let axisX = d3.axisBottom(xScale)
+        .ticks(5);
+
+    container.append("g")
+        .style("transform",
+            `translate(${margin.left}px,${height - margin.bottom}px)`
+        )
+        .call(axisX);
+
+    let axisY = d3.axisLeft(yScale);
+
+    container.append("g")
+        .style("transform",
+            `translate(${margin.left}px, ${margin.top}px)`
+        )
+        .call(axisY);
+}
+
+function drawAirlinesChart(airlines) {
+    let config = getAirlinesChartConfig();
+    let scales = getAirlinesChartScales(airlines, config);
+    drawBarsAirlinesChart(airlines, scales, config);
+    drawAxesAirlinesChart(airlines, scales, config)
+}
+
+function getMapConfig(){
+    let width = 600;
+    let height = 400;
+    let container = d3.select('#Map')
+        .attr("width", width)
+        .attr("height", height);
+
+    return {width, height, container}
+}
+
+function getMapProjection(config) {
+    let {width, height} = config;
+    let projection = d3.geoMercator();
+        projection.scale(97)
+            .translate([width / 2, height / 2 + 20]);
+
+    store.mapProjection = projection;
+    return projection;
+}
+
+function drawBaseMap(container, countries, projection){
+    let path = d3.geoPath().projection(projection);
+
+        container.selectAll("path").data(countries)
+            .enter().append("path")
+            .attr("d", d => path(d))
+            .attr("stroke", "#ccc")
+            .attr("fill", "#eee")
+}
+
+function drawMap(geoJson) {
+    let config = getMapConfig();
+    let projection = getMapProjection(config);
+    console.log(geoJson);
+    drawBaseMap(config.container, geoJson.features, projection)
+}
+
 function showData() {
     let routes = store.routes;
     let airlines = groupByAirline(store.routes);
-    console.log(airlines)
+    console.log(airlines);
+    drawAirlinesChart(airlines);
+    drawMap(store.geoJSON)
 }
+
 loadData().then(showData);
